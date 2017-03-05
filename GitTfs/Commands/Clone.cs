@@ -8,6 +8,7 @@ using Sep.Git.Tfs.Core;
 using StructureMap;
 using Sep.Git.Tfs.Util;
 using Sep.Git.Tfs.Core.TfsInterop;
+using System.Collections.Generic;
 
 namespace Sep.Git.Tfs.Commands
 {
@@ -20,6 +21,7 @@ namespace Sep.Git.Tfs.Commands
         private readonly Globals _globals;
         private readonly InitBranch _initBranch;
         private bool _resumable;
+        private string _ignoreBranchesFilePath;
 
         public Clone(Globals globals, Fetch fetch, Init init, InitBranch initBranch)
         {
@@ -35,7 +37,8 @@ namespace Sep.Git.Tfs.Commands
             get
             {
                 return _init.OptionSet.Merge(_fetch.OptionSet)
-                           .Add("resumable", "if an error occurred, try to continue when you restart clone with same parameters", v => _resumable = v != null);
+                           .Add("resumable", "if an error occurred, try to continue when you restart clone with same parameters", v => _resumable = v != null)
+                           .Add("ignore-branches=", "Path to a file containing a newline separated list of branches to ignore", v => _ignoreBranchesFilePath = v);
             }
         }
 
@@ -47,6 +50,20 @@ namespace Sep.Git.Tfs.Commands
         public int Run(string tfsUrl, string tfsRepositoryPath, string gitRepositoryPath)
         {
             var currentDir = Environment.CurrentDirectory;
+
+            if (!string.IsNullOrEmpty(_ignoreBranchesFilePath))
+            {
+                try
+                {
+                    _initBranch.BranchesToIgnore = ReadIgnoreBranchesFile(_ignoreBranchesFilePath);
+                }
+                catch (GitTfsException)
+                {
+                    Trace.TraceError("Malformed file passed to --ignore-branches.");
+                    throw;
+                }
+            }
+
             var repositoryDirCreated = InitGitDir(gitRepositoryPath);
 
             // TFS string representations of repository paths do not end in trailing slashes
@@ -122,6 +139,8 @@ namespace Sep.Git.Tfs.Commands
                 {
                     _initBranch.CloneAllBranches = true;
 
+                    
+                    
                     retVal = _initBranch.Run();
                 }
             }
@@ -231,6 +250,21 @@ namespace Sep.Git.Tfs.Commands
                 di.Create();
             }
             return repositoryDirCreated;
+        }
+
+        private static IEnumerable<string> ReadIgnoreBranchesFile(string filepath)
+        {
+            var content = File.ReadAllLines(filepath);
+            var branchesToIgnore = new List<string>();
+            foreach (var line in content)
+            {
+                var branch = line;
+                branch.AssertValidTfsPath();
+                branch = (branch ?? string.Empty).TrimEnd('/');
+                branchesToIgnore.Add(branch);
+            }
+
+            return branchesToIgnore;
         }
 
         private static void CleanDirectory(string gitRepositoryPath)

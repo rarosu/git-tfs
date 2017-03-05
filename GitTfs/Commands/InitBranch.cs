@@ -23,6 +23,7 @@ namespace Sep.Git.Tfs.Commands
         public bool CloneAllBranches { get; set; }
         public bool NoFetch { get; set; }
         public bool DontCreateGitBranch { get; set; }
+        public IEnumerable<string> BranchesToIgnore { get; set; }
 
         public IGitTfsRemote RemoteCreated { get; private set; }
 
@@ -30,6 +31,8 @@ namespace Sep.Git.Tfs.Commands
         {
             _globals = globals;
             _helper = helper;
+
+            BranchesToIgnore = Enumerable.Empty<string>();
         }
 
         public OptionSet OptionSet
@@ -267,6 +270,9 @@ namespace Sep.Git.Tfs.Commands
             var branchesToProcess = new List<BranchDatas>();
             foreach (var childBranchPath in childBranchPaths)
             {
+                if (BranchesToIgnore.Contains(childBranchPath.TfsRepositoryPath))
+                    continue;
+
                 Trace.TraceInformation("- " + childBranchPath.TfsRepositoryPath);
                 var branchDatas = new BranchDatas
                 {
